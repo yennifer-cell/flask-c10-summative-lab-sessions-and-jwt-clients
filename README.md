@@ -1,79 +1,82 @@
 # Productivity Notes API
 
-A Flask REST API backend for a personal productivity notes app with JWT authentication.
+A Flask REST API for a personal productivity notes app. It uses JWT bearer
+tokens for authentication, bcrypt for password hashing, SQLAlchemy for
+persistence, and Flask-Migrate for schema changes. Every note is owned by its
+creator; authenticated users can only list, view, update, or delete their own
+notes.
 
-## Project Description
+## Requirements
 
-This API supports user signup, login, and authenticated CRUD operations for user-owned notes. Each note belongs to a specific user, and access is restricted so that users cannot read or modify other users' notes.
+- Python 3.12 (the version pinned in `Pipfile`)
+- Pipenv
 
-## Installation
+## Installation and database setup
 
-1. Install pipenv if needed: `pip install pipenv`
-2. In the repository root, install dependencies:
-   ```bash
-   cd /home/shiks/flask-c10-summative-lab-sessions-and-jwt-clients
-   pipenv install --dev
-   ```
-
-## Database Setup
-
-Create and seed the database:
+From the repository root:
 
 ```bash
+pip install pipenv
+pipenv install
+pipenv run flask --app app:create_app db upgrade
 pipenv run python seed.py
 ```
 
-## Running the App
+The migration files are included in the repository, so `db init` and
+`db migrate` are not needed for a fresh install. The default database is
+`app.db` in the repository root. Set `DATABASE_URL` to use another database.
+Running the seed script adds three demo users (`user1`, `user2`, and `user3`)
+with the password `password`, along with five sample notes per user. Seeding
+is safe to repeat and does not erase existing records.
 
-Start the Flask server:
-
-```bash
-pipenv run python app.py
-```
-
-The API runs at `http://127.0.0.1:5000`.
-
-## Deployment
-
-This project includes a `Procfile` and `requirements.txt` for deployment compatibility.
-
-For Heroku-style deployment:
-
-1. Ensure `Procfile` exists in the repository root.
-2. Ensure `requirements.txt` is present.
-3. Commit and push the code.
-4. On the deployment host, configure environment variables if needed:
-   - `SECRET_KEY`
-   - `JWT_SECRET_KEY`
-   - `DATABASE_URL` (optional; defaults to SQLite)
-5. Start the app with the platform's process manager.
-
-Example local command:
+## Run the API
 
 ```bash
-heroku local web
+pipenv run flask --app app:create_app run
 ```
 
-## Endpoints
+The development server is available at `http://127.0.0.1:5000`. For local
+development, the app generates temporary signing keys at startup. Set stable,
+unique `SECRET_KEY` and `JWT_SECRET_KEY` environment variables in any deployed
+environment; access tokens expire after one hour.
 
-- `GET /` - Health check
-- `POST /signup` - Create a new user
-  - Body: `{ "username": "user1", "password": "password", "password_confirmation": "password" }`
-  - Returns: `{ "token": "...", "user": { ... } }`
-- `POST /login` - Login existing user
-  - Body: `{ "username": "user1", "password": "password" }`
-  - Returns: `{ "token": "...", "user": { ... } }`
-- `GET /me` - Get current user info
-  - Requires header: `Authorization: Bearer <token>`
-- `GET /notes` - Get current user's notes with pagination
-  - Query params: `page`, `per_page`
-- `POST /notes` - Create a new note
-  - Body: `{ "title": "...", "content": "...", "mood": "..." }`
-- `PATCH /notes/<id>` - Update a note
-  - Body may include `title`, `content`, and/or `mood`
-- `DELETE /notes/<id>` - Delete a note
+## Authentication
 
-## Notes
+Signup and login return a JWT in the `token` field. Send it on protected
+requests as:
 
-- Only authenticated users can access `/me` and `/notes` routes.
-- Users may only access notes they own.
+```http
+Authorization: Bearer <token>
+```
+
+Signup requires a username, a password of at least eight characters, and a
+matching `password_confirmation`. Usernames are unique. Passwords are stored
+as bcrypt hashes and are never included in API responses.
+
+## API endpoints
+
+| Method | Path | Authentication | Description |
+| --- | --- | --- | --- |
+| `GET` | `/` | No | Health check |
+| `POST` | `/signup` | No | Create an account and return a token. Body: `username`, `password`, `password_confirmation`. |
+| `POST` | `/login` | No | Authenticate and return a token. Body: `username`, `password`. |
+| `GET` | `/me` | Bearer token | Return the authenticated user's public profile. |
+| `GET` | `/notes?page=1&per_page=10` | Bearer token | List only the current user's notes. Page is 1-based and `per_page` must be between 1 and 100. |
+| `POST` | `/notes` | Bearer token | Create a note. Body: `title`, `content`, and optional `mood`. The owner is assigned from the token. |
+| `PATCH` | `/notes/<id>` | Bearer token | Update one or more of `title`, `content`, and `mood` on an owned note. |
+| `DELETE` | `/notes/<id>` | Bearer token | Delete an owned note. Returns `204 No Content`. |
+
+Notes include `id`, `title`, `content`, optional `mood`, and `user_id`.
+Requests without a valid token receive `401 Unauthorized`. A note that is
+missing or belongs to another user receives `404 Not Found`.
+
+## Tests
+
+Run the API tests with:
+
+```bash
+pipenv run python -m pytest
+```
+
+The test suite uses an in-memory SQLite database and does not modify the
+development database.

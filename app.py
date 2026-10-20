@@ -7,9 +7,11 @@ from resources.auth import LoginResource, SignupResource, MeResource
 from resources.notes import NoteListResource, NoteResource
 
 
-def create_app():
+def create_app(config_override=None):
     app = Flask(__name__)
     app.config.from_object(Config)
+    if config_override:
+        app.config.update(config_override)
 
     bcrypt.init_app(app)
     db.init_app(app)
@@ -31,4 +33,4 @@ def create_app():
 
 
 if __name__ == "__main__":
-    create_app().run(debug=True)
+    create_app().run()
